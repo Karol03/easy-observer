@@ -55,6 +55,28 @@ public:
         }
     }
 
+    template <typename T>
+    void runUntil()
+    {
+        auto isClose{false};
+        while (!isClose)
+        {
+            m_pipe.wait();
+            while (m_pipe)
+            {
+                auto front = m_pipe.pop();
+                for (auto& [id, tunnel] : m_threads)
+                {
+                    tunnel.input.push(front);
+                }
+                if (Event<T>().uuid() == front->uuid())
+                {
+                    isClose = true;
+                }
+            }
+        }
+    }
+
 private:
     static inline std::unordered_map<std::size_t, Tunnel> m_threads{};
     static inline std::mutex m_mutex{};
@@ -63,26 +85,26 @@ private:
 };
 
 
-class NotifyThread
+class Notifier
 {
 public:
-    NotifyThread(std::function<void()> function = nullptr)
+    Notifier(std::function<void(Notifier&)> function = nullptr)
         : m_main{std::move(function)}
         , m_myId{generateId()}
     {
         m_tunnel = &NotifyMainThread::install(m_myId);
     }
 
-    ~NotifyThread()
+    ~Notifier()
     {
         NotifyMainThread::uninstall(m_myId);
         m_tunnel = nullptr;
     }
 
-    NotifyThread(const NotifyThread&) = delete;
-    NotifyThread& operator=(const NotifyThread&) = delete;
-    NotifyThread(NotifyThread&&) = delete;
-    NotifyThread& operator=(NotifyThread&&) = delete;
+    Notifier(const Notifier&) = delete;
+    Notifier& operator=(const Notifier&) = delete;
+    Notifier(Notifier&&) = delete;
+    Notifier& operator=(Notifier&&) = delete;
 
     template <typename T>
     std::enable_if_t<std::is_base_of_v<IEvent, T>,
@@ -110,9 +132,11 @@ public:
     void run()
     {
         if (m_main)
-            m_main();
-        m_main = nullptr;
+            m_main(*this);
+    }
 
+    void wait()
+    {
         while (!m_isClose && m_tunnel)
         {
             m_tunnel->input.wait();
@@ -142,7 +166,7 @@ private:
 
 private:
     std::unordered_map<int, ISubscription*> m_subscriptions{};
-    std::function<void()> m_main{};
+    std::function<void(Notifier&)> m_main{};
     Tunnel* m_tunnel{};
     std::mutex m_mutex{};
     std::size_t m_subscriptionIds{};

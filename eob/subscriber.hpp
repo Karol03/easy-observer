@@ -15,7 +15,7 @@ template <typename T>
 class Subscription : public ISubscription
 {
 public:
-    Subscription(NotifyThread* myThread)
+    Subscription(Notifier* myThread)
         : m_unsubscriber{myThread->subscribe<T>(this)}
     {}
 
@@ -51,7 +51,7 @@ template <typename... Args>
 class Subscriber : public Subscription<Args>...
 {
 public:
-    Subscriber(NotifyThread& myThread)
+    Subscriber(Notifier& myThread)
         : Subscription<Args>{&myThread}...
         , m_myThread{myThread}
     {}
@@ -69,7 +69,7 @@ protected:
     }
 
 private:
-    NotifyThread& m_myThread;
+    Notifier& m_myThread;
 };
 
 }  // namespace eob

@@ -14,11 +14,13 @@
 #include "eob/threadwrapper.hpp"
 
 
+// ========================== CUSTOM EVENT DECLARATION ================================
 /**
- * @brief Declare own event
- * Inherite from Event<> with match template
+ * @brief Declare two events
+ * Each event must inherit from Event<> with own typename
+ *      it is required to proper register event type
  *
- * Added some method to check if it call properly
+ * Added a method to check if it will call properly from event handler
  */
 class Event_test : public eob::Event<Event_test>
 {
@@ -29,7 +31,7 @@ public:
 
     void print() const
     {
-        std::cerr << "Hello world from Event_test named '" << m_name << "'\n";
+        std::cerr << "Event_test named '" << m_name << "' print\n";
     }
 
 private:
@@ -37,51 +39,129 @@ private:
 };
 
 
+class Event_test_2 : public eob::Event<Event_test_2>
+{
+public:
+    Event_test_2(std::string name)
+        : m_name{name}
+    {}
+
+    void print() const
+    {
+        std::cerr << "Event_test_2 named '" << m_name << "' print\n";
+    }
+
+private:
+    std::string m_name;
+};
+
+// ========================== CUSTOM EVENT DECLARATION ================================
+
+
+// ========================== CLASSES DECLARATION ================================
 /**
- * @brief Declare own class
- * Class subscribes on Event_type only,
- * in case of more subscription types give them in parameter pack like:
- *      Subscriber<Event_test, Event_test_2, Event_test_3>
+ * @brief Declare own classes
+ * MyClass subscribes on Event_type only, when MyClass2 on Event_type_2 only,
+ * It is possible to subscribe on more event types, in this case inherit from Subscriber
+ *      using parameter pack like: Subscriber<Event_test, Event_test_2, Event_test_3>
  */
 class MyClass : private eob::Subscriber<Event_test>
 {
 public:
     /**
      * @brief MyClass
-     * @param nt - reference to application thread which will collect and dispatch notification
-     *             for the class
+     * @param notifier - reference to application notifier which will collect and dispatch
+     *                   notification for the class
      */
-    MyClass(eob::NotifyThread& nt)
-        : Subscriber<Event_test>{nt}
+    MyClass(eob::Notifier& notifier)
+        : Subscriber<Event_test>{notifier}
     {}
+
+    /**
+     * @brief run
+     * Method which emit some event
+     */
+    void run()
+    {
+        emit(Event_test_2("Sent from MyClass"));
+    }
 
 protected:
     /**
      * @brief onEvent
      * @param event
-     * Callback when event caught. Each observed event must have own callback
+     * Callback when event 'Event_test' caught. Each observed event must override callback
      */
-    void onEvent(const Event_test& event) { event.print(); }
+    void onEvent(const Event_test& event) override { event.print(); }
 };
+
+
+class MyClass2 : private eob::Subscriber<Event_test_2>
+{
+public:
+    MyClass2(eob::Notifier& notifier)           // must take notifier
+        : Subscriber<Event_test_2>{notifier}    // initialize subscriber with notifier
+    {}
+
+protected:
+    void onEvent(const Event_test_2& event) override    // override onEvent callback
+    {
+        event.print();                                  // print event details
+        emit(Event_test("Sent from MyClass2"));         // emit different event from callback body
+    }
+};
+
+// ========================== CLASSES DECLARATION ================================
+
+
+// ===================== APPLICATION THREADS MAIN DECLARATION =======================
+
+void appThreadMain(eob::Notifier& notifier)
+{
+    using std::chrono_literals::operator""s;
+
+    MyClass mc{notifier};                  // create own class with subscription on 'Event_test'
+    std::this_thread::sleep_for(1s);       // wait to other thread initialization
+    mc.run();                              // emit event 'Event_test_2' from MyClass body
+    notifier.wait();                       // if we want to receive events in this thread
+                                           // it is required to keep notification loop alive
+}
+
+void appThreadMain2(eob::Notifier& notifier)
+{
+    MyClass2 mc{notifier};                 // create own class with subscription on 'Event_test_2'
+    notifier.wait();                       // as above, keep notification loop
+}
+
+// ===================== APPLICATION THREADS MAIN DECLARATION =======================
 
 
 int main()
 {
-    eob::DispatcherThread mainThread;       // start main notification dispatcher - required,
-                                            // only one dispatcher possible
+    using std::chrono_literals::operator""ms;
+    using std::chrono_literals::operator""s;
 
-    eob::ApplicationThread appThread;       // start application thread - required,
-                                            // multiple threads allowed
+    {
+        std::cerr << "First approach, keep alive threads by yourself\n";
+        auto supervisor = eob::Supervisor{};                                    // create supervisor
+        eob::AppThread appThread = supervisor.createAppThread(appThreadMain);   // create thread with own main function
+        eob::AppThread appThread2 = supervisor.createAppThread(appThreadMain2); // create second thread with own main function
+        std::this_thread::sleep_for(2s);  // keep threads alive for some time
+                                          // you could use e.g. while loop with own end condition
+        // here supervisor and all application threads will be destroyed
+    }
 
-    MyClass mc{appThread};                  // create own class with subscription
+    std::cerr << "\nGive some time to close all threads\n";
+    std::this_thread::sleep_for(500ms);
 
-    // ...
-    appThread.emit(Event_test{"My name"});  // simmulate somewhere in code some class emit event
-                                            // in class you don't have to use appThread to emit event
-                                            // subscriber has already built-in method to do this
-    // ...
-
-    std::this_thread::sleep_for(std::chrono_literals::operator""s(1));  // give some time to dispatch events
-
+    {
+        std::cerr << "\nSecond approach, request supervisor to keep alive threads until specified event received\n";
+        auto supervisor = eob::Supervisor<Event_test>{};    // create a supervisor for which
+                                                            // the destruction condition is to
+                                                            // receive the event 'Event_test'
+        eob::AppThread appThread = supervisor.createAppThread(appThreadMain);   // create thread with own main function
+        eob::AppThread appThread2 = supervisor.createAppThread(appThreadMain2); // create second thread with own main function
+        // here supervisor and all application threads will be alive until 'Event_test' emission
+    }
     return 0;
 }

@@ -3,8 +3,6 @@
  */
 #pragma once
 
-#include <variant>
-
 #include "thread.hpp"
 
 

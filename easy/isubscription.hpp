@@ -6,7 +6,7 @@
 #include "event.hpp"
 
 
-namespace eob
+namespace easy
 {
 
 class ISubscription
@@ -16,4 +16,4 @@ public:
     virtual void notify(const IEvent& event) = 0;
 };
 
-}  // namespace eob
+}  // namespace easy

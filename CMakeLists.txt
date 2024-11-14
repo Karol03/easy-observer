@@ -12,6 +12,9 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
 add_executable(easyobserver-main
     main.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/simple_example.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/advanced_example.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} easyobserver)

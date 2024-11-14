@@ -60,34 +60,13 @@ public:
     std::thread::id threadId;
 };
 
-class NeverCalledSubscriber : public easy::Subscribe<EventThread>
+template <typename T>
+class NeverCalledSubscriber : public easy::Subscribe<T>
 {
 public:
-    NeverCalledSubscriber(easy::Notifier& notifier) : easy::Subscribe<EventThread>{notifier} {}
+    NeverCalledSubscriber(easy::Notifier& notifier) : easy::Subscribe<T>{notifier} {}
     ~NeverCalledSubscriber() { REQUIRE_FALSE(isCalled); }
-    void onEvent(const EventThread& event) { REQUIRE_FALSE(event.isCalledInSenderThread()); isCalled = true; }
-
-private:
-    bool isCalled = false;
-};
-
-class NeverCalledSubscriber2 : public easy::Subscribe<EventThread2>
-{
-public:
-    NeverCalledSubscriber2(easy::Notifier& notifier) : easy::Subscribe<EventThread2>{notifier} {}
-    ~NeverCalledSubscriber2() { REQUIRE_FALSE(isCalled); }
-    void onEvent(const EventThread2& event) { REQUIRE_FALSE(event.isCalledInSenderThread()); isCalled = true; }
-
-private:
-    bool isCalled = false;
-};
-
-class Subscriber : public easy::Subscribe<EventThread>
-{
-public:
-    Subscriber(easy::Notifier& notifier) : easy::Subscribe<EventThread>{notifier} {}
-    ~Subscriber() { REQUIRE(isCalled); }
-    void onEvent(const EventThread& event) { REQUIRE(event.isCalledInSenderThread()); isCalled = true; }
+    void onEvent(const T& event) { REQUIRE_FALSE(event.isCalledInSenderThread()); isCalled = true; }
 
 private:
     bool isCalled = false;
@@ -140,11 +119,11 @@ private:
 };
 
 template <typename T>
-class SubscriberT : public easy::Subscribe<T>
+class Subscriber : public easy::Subscribe<T>
 {
 public:
-    SubscriberT(easy::Notifier& notifier) : easy::Subscribe<T>{notifier} {}
-    ~SubscriberT() { REQUIRE(isCalled); }
+    Subscriber(easy::Notifier& notifier) : easy::Subscribe<T>{notifier} {}
+    ~Subscriber() { REQUIRE(isCalled); }
     void onEvent(const T& event) { REQUIRE(event.isCalledInSenderThread()); isCalled = true; }
 
 private:
@@ -172,14 +151,14 @@ private:
 TEST_CASE("Nothing to dispatch if no event sent", "[single_thread][single_notifier]")
 {
     easy::Notifier notifier;
-    auto sub = NeverCalledSubscriber(notifier);
+    auto sub = NeverCalledSubscriber<EventThread>(notifier);
     REQUIRE_FALSE(notifier.dispatch());
 };
 
 TEST_CASE("Subscriber does not send event to itself", "[single_thread][single_notifier]")
 {
     easy::Notifier notifier;
-    auto sub = NeverCalledSubscriber(notifier);
+    auto sub = NeverCalledSubscriber<EventThread>(notifier);
     notifier.dispatch();
     notifier.publish(EventThread());
     REQUIRE_FALSE(notifier.dispatch());
@@ -188,8 +167,8 @@ TEST_CASE("Subscriber does not send event to itself", "[single_thread][single_no
 TEST_CASE("Subscriber does not send event to others in the same notifier", "[single_thread][single_notifier]")
 {
     easy::Notifier notifier;
-    auto sub = NeverCalledSubscriber(notifier);
-    auto sub2 = NeverCalledSubscriber(notifier);
+    auto sub = NeverCalledSubscriber<EventThread>(notifier);
+    auto sub2 = NeverCalledSubscriber<EventThread>(notifier);
     notifier.dispatch();
     notifier.publish(EventThread());
     REQUIRE_FALSE(notifier.dispatch());
@@ -200,8 +179,8 @@ TEST_CASE("Event is send between notifiers in the same thread", "[single_thread]
     easy::Notifier neverCalledSubscriberNotifier;
     easy::Notifier notifier;
 
-    auto sub = NeverCalledSubscriber(neverCalledSubscriberNotifier);
-    auto sub2 = Subscriber(notifier);
+    auto sub = NeverCalledSubscriber<EventThread>(neverCalledSubscriberNotifier);
+    auto sub2 = Subscriber<EventThread>(notifier);
 
     neverCalledSubscriberNotifier.dispatch();
     notifier.dispatch();
@@ -219,8 +198,8 @@ TEST_CASE("Event is not sent to different subscribers for the same notifier", "[
 {
     easy::Notifier neverCalledSubscriberNotifier;
 
-    auto sub = NeverCalledSubscriber(neverCalledSubscriberNotifier);
-    auto sub2 = NeverCalledSubscriber2(neverCalledSubscriberNotifier);
+    auto sub = NeverCalledSubscriber<EventThread>(neverCalledSubscriberNotifier);
+    auto sub2 = NeverCalledSubscriber<EventThread2>(neverCalledSubscriberNotifier);
 
     neverCalledSubscriberNotifier.dispatch();
 
@@ -261,10 +240,10 @@ TEST_CASE("All subscribers receive subscribed event", "[single_thread][multiple_
 {
     easy::Notifier notifier, notifier2, notifier3, notifier4;
 
-    auto sub = NeverCalledSubscriber(notifier);
-    auto sub2 = SubscriberT<EventThread2>(notifier2);
-    auto sub3 = SubscriberT<EventThread2>(notifier3);
-    auto sub4 = SubscriberT<EventThread2>(notifier4);
+    auto sub = NeverCalledSubscriber<EventThread>(notifier);
+    auto sub2 = Subscriber<EventThread2>(notifier2);
+    auto sub3 = Subscriber<EventThread2>(notifier3);
+    auto sub4 = Subscriber<EventThread2>(notifier4);
 
     notifier.publish(EventThread2());
 
@@ -283,10 +262,10 @@ TEST_CASE("Subscribers under different notifiers receives only subscribed events
 {
     easy::Notifier notifier, notifier2, notifier3, notifier4;
 
-    auto sub = SubscriberT<EventThread>(notifier);
-    auto sub2 = SubscriberT<EventThread2>(notifier2);
-    auto sub3 = SubscriberT<EventThread3>(notifier3);
-    auto sub4 = SubscriberT<EventThread4>(notifier4);
+    auto sub = Subscriber<EventThread>(notifier);
+    auto sub2 = Subscriber<EventThread2>(notifier2);
+    auto sub3 = Subscriber<EventThread3>(notifier3);
+    auto sub4 = Subscriber<EventThread4>(notifier4);
 
     notifier.publish(EventThread2());
     notifier2.publish(EventThread3());
